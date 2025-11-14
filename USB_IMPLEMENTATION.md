@@ -111,3 +111,104 @@ Update `device_filter.xml` to match your dongle:
 - Smart card readers typically use APDU commands
 - Security tokens may have specific authentication flows
 - Test thoroughly with your actual hardware
+
+
+## Smart Card Commands Implementation
+
+### New Methods Added to `SmartCardService`
+
+#### 1. **Select Master File (MF)**
+```dart
+Future<String?> selectMF()
+```
+- **APDU Command**: `00 A4 00 00 02 3F 00`
+- **Purpose**: Selects the Master File (root directory) of the smart card
+- **Usage**: Call before accessing card file system
+
+#### 2. **Select Dedicated File (DF)**
+```dart
+Future<String?> selectDF()
+```
+- **APDU Command**: `00 A4 00 00 02 6F 00`
+- **Purpose**: Selects a Dedicated File on the smart card
+- **Usage**: Navigate to specific application directory
+
+#### 3. **MSE Restore (Manage Security Environment)**
+```dart
+Future<String?> mseRestore({required String algorithm})
+```
+- **APDU Commands**:
+  - RSA: `00 22 F3 03` (algorithm: 'rsa')
+  - ECC: `00 22 F3 0D` (algorithm: 'ecc')
+- **Purpose**: Restores security environment for cryptographic operations
+- **Parameters**: 
+  - `algorithm`: 'rsa' for RSA (0x03) or 'ecc' for ECC (0x0D)
+- **Usage**: Must be called before performing signature operations
+
+#### 4. **PSO Digital Signature**
+```dart
+Future<String?> psoDigitalSignature(String data)
+```
+- **APDU Command**: `00 2A 9E 9A [length] [data]`
+- **Purpose**: Performs digital signature operation on provided data
+- **Parameters**:
+  - `data`: Hexadecimal string of exactly 32 bytes (64 hex characters)
+- **Validation**: 
+  - Automatically validates data is in hex format
+  - Ensures data is exactly 32 bytes
+  - Throws `ArgumentError` if validation fails
+- **Usage**: Signs random or specific 32-byte data with card's private key
+
+#### 5. **Generate Random Data**
+```dart
+static String generateRandomData32Bytes()
+```
+- **Purpose**: Generates random 32-byte data for testing signatures
+- **Returns**: 64-character hexadecimal string
+- **Usage**: Helper method for PSO Digital Signature testing
+
+### UI Integration
+
+The `SmartCardScreen` now includes a dedicated "Smart Card Operations" section with buttons for:
+
+1. **Select MF** - Quick access to Master File selection
+2. **Select DF** - Quick access to Dedicated File selection
+3. **MSE RSA** - Set security environment for RSA operations
+4. **MSE ECC** - Set security environment for ECC operations
+5. **PSO Digital Signature** - Sign 32-byte data with confirmation dialog
+
+### Typical Usage Flow
+
+```dart
+// 1. Connect to card
+await smartCardService.connectCard(protocol: 1);
+
+// 2. Select Master File
+await smartCardService.selectMF();
+
+// 3. Select Dedicated File (if needed)
+await smartCardService.selectDF();
+
+// 4. Set security environment
+await smartCardService.mseRestore(algorithm: 'rsa'); // or 'ecc'
+
+// 5. Perform digital signature
+final randomData = SmartCardService.generateRandomData32Bytes();
+final signature = await smartCardService.psoDigitalSignature(randomData);
+```
+
+### Command History
+
+All operations are automatically logged in the command history with:
+- Full APDU command sent
+- Response data received
+- Status word interpretation
+- Timestamp
+- Copy functionality
+
+### Error Handling
+
+- Invalid data format throws `ArgumentError`
+- Invalid data length throws `ArgumentError`
+- Failed transmissions return `null`
+- Status words are parsed and displayed with user-friendly messages

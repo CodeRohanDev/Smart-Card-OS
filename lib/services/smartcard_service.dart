@@ -51,8 +51,63 @@ class SmartCardService {
   }
 
   // Common APDU commands
-  static const String SELECT_MASTER_FILE = '00A40000023F00';
-  static const String GET_RESPONSE = '00C0000000';
+  static const String selectMasterFile = '00A40000023F00';
+  static const String getResponse = '00C0000000';
+  
+  // New smartcard commands
+  
+  /// Select Master File (MF)
+  /// Command: 00 A4 00 00 02 3F 00
+  Future<String?> selectMF() async {
+    return await transmitApdu('00A40000023F00');
+  }
+  
+  /// Select Dedicated File (DF)
+  /// Command: 00 A4 00 00 02 6F 00
+  Future<String?> selectDF() async {
+    return await transmitApdu('00A40000026F00');
+  }
+  
+  /// MSE Restore - Manage Security Environment Restore
+  /// @param algorithm: 'rsa' for RSA (0x03) or 'ecc' for ECC (0x0D)
+  /// Command: 00 22 F3 [03|0D]
+  Future<String?> mseRestore({required String algorithm}) async {
+    final p2 = algorithm.toLowerCase() == 'rsa' ? '03' : '0D';
+    return await transmitApdu('0022F3$p2');
+  }
+  
+  /// PSO Digital Signature - Perform Security Operation for Digital Signature
+  /// @param data: Random data to be signed (must be 32 bytes / 64 hex chars)
+  /// Command: 00 2A 9E 9A [length] [data]
+  /// Returns the signature response
+  Future<String?> psoDigitalSignature(String data) async {
+    // Remove spaces and validate
+    final cleanData = data.replaceAll(' ', '').toUpperCase();
+    
+    // Validate hex format
+    if (!RegExp(r'^[0-9A-F]+$').hasMatch(cleanData)) {
+      throw ArgumentError('Data must be in hexadecimal format');
+    }
+    
+    // Validate length (32 bytes = 64 hex characters)
+    if (cleanData.length != 64) {
+      throw ArgumentError('Data must be exactly 32 bytes (64 hex characters), got ${cleanData.length ~/ 2} bytes');
+    }
+    
+    // Calculate length byte (0x20 = 32 in hex)
+    final length = '20';
+    
+    // Build APDU: CLA INS P1 P2 Lc Data
+    final apdu = '002A9E9A$length$cleanData';
+    
+    return await transmitApdu(apdu);
+  }
+  
+  /// Generate random 32-byte data for signing (as hex string)
+  static String generateRandomData32Bytes() {
+    final random = List.generate(32, (i) => (i * 7 + 13) % 256);
+    return random.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
+  }
   
   // Parse status word
   static String parseStatusWord(String sw) {
@@ -141,7 +196,7 @@ class SmartCardService {
   // Get all common APDU commands
   static Map<String, String> get commonCommands => {
     'SELECT MF': '00A40000023F00',
-    'SELECT DF': '00A4010C02',
+    'SELECT DF': '00A40000026F00',
     'SELECT EF': '00A4020C02',
     'READ BINARY': '00B0000000',
     'UPDATE BINARY': '00D6000000',
@@ -155,5 +210,7 @@ class SmartCardService {
     'EXTERNAL AUTH': '0082000000',
     'GET DATA': '00CA000000',
     'PUT DATA': '00DA000000',
+    'MSE RESTORE RSA': '0022F303',
+    'MSE RESTORE ECC': '0022F30D',
   };
 }

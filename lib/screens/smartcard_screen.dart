@@ -22,7 +22,6 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
   final SmartCardService _smartCardService = SmartCardService();
   final TextEditingController _commandController = TextEditingController();
   
-  bool _isConnected = false;
   bool _isCardConnected = false;
   bool _isProcessing = false;
   String? _atr;
@@ -58,10 +57,6 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
       final connected = await _usbService.connectDevice(widget.deviceId);
       
       if (!mounted) return;
-      
-      setState(() {
-        _isConnected = connected;
-      });
 
       if (connected) {
         await _connectToCard();
@@ -94,13 +89,13 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
               style: TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
-            _buildProtocolOption(
-              0,
-              'T=0',
-              'Byte-oriented',
-              'Older cards, simpler protocol',
-              Icons.looks_one_outlined,
-            ),
+            // _buildProtocolOption(
+            //   0,
+            //   'T=0',
+            //   'Byte-oriented',
+            //   'Older cards, simpler protocol',
+            //   Icons.looks_one_outlined,
+            // ),
             const SizedBox(height: 12),
             _buildProtocolOption(
               1,
@@ -280,8 +275,8 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
             const SizedBox(height: 20),
             if (_isCardConnected) ...[
               _buildCommandInput(),
-              // const SizedBox(height: 20),
-              // _buildQuickCommands(),
+              const SizedBox(height: 20),
+              _buildSmartCardOperations(),
               const SizedBox(height: 20),
               _buildHistory(),
             ],
@@ -438,110 +433,230 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
     );
   }
 
-  Widget _buildQuickCommands() {
-    final commands = SmartCardService.commonCommands;
+  Widget _buildSmartCardOperations() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Smart Card Operations',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // File Selection
+          Row(
+            children: [
+              Expanded(
+                child: _buildOperationButton(
+                  'Select MF',
+                  Icons.folder_outlined,
+                  const Color(0xFF6366F1),
+                  _selectMasterFile,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildOperationButton(
+                  'Select DF',
+                  Icons.folder_special_outlined,
+                  const Color(0xFF8B5CF6),
+                  _selectDedicatedFile,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // MSE Restore
+          Row(
+            children: [
+              Expanded(
+                child: _buildOperationButton(
+                  'MSE RSA',
+                  Icons.security,
+                  const Color(0xFF10B981),
+                  () => _mseRestore('rsa'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildOperationButton(
+                  'MSE ECC',
+                  Icons.shield,
+                  const Color(0xFF14B8A6),
+                  () => _mseRestore('ecc'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Digital Signature
+          SizedBox(
+            width: double.infinity,
+            child: _buildOperationButton(
+              'PSO Digital Signature (32 bytes)',
+              Icons.draw,
+              const Color(0xFFEF4444),
+              _psoDigitalSignature,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+  Widget _buildOperationButton(String label, IconData icon, Color color, VoidCallback onPressed) {
+    return ElevatedButton.icon(
+      onPressed: _isProcessing ? null : onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontSize: 13)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
+  }
+
+  Future<void> _selectMasterFile() async {
+    setState(() => _isProcessing = true);
+    final response = await _smartCardService.selectMF();
+    setState(() => _isProcessing = false);
+    
+    if (response != null) {
+      _addToHistory('SELECT MF (00A40000023F00)', response);
+      _showMessage('Master File selected');
+    } else {
+      _showMessage('Failed to select Master File');
+    }
+  }
+
+  Future<void> _selectDedicatedFile() async {
+    setState(() => _isProcessing = true);
+    final response = await _smartCardService.selectDF();
+    setState(() => _isProcessing = false);
+    
+    if (response != null) {
+      _addToHistory('SELECT DF (00A40000026F00)', response);
+      _showMessage('Dedicated File selected');
+    } else {
+      _showMessage('Failed to select Dedicated File');
+    }
+  }
+
+  Future<void> _mseRestore(String algorithm) async {
+    setState(() => _isProcessing = true);
+    final response = await _smartCardService.mseRestore(algorithm: algorithm);
+    setState(() => _isProcessing = false);
+    
+    if (response != null) {
+      final p2 = algorithm.toLowerCase() == 'rsa' ? '03' : '0D';
+      _addToHistory('MSE RESTORE ${algorithm.toUpperCase()} (0022F3$p2)', response);
+      _showMessage('MSE Restore ${algorithm.toUpperCase()} executed');
+    } else {
+      _showMessage('Failed to execute MSE Restore');
+    }
+  }
+
+  Future<void> _psoDigitalSignature() async {
+    // Generate random 32-byte data
+    final randomData = SmartCardService.generateRandomData32Bytes();
+    
+    // Show dialog with the data
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('PSO Digital Signature'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Quick Commands',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1F2937),
+              'This will sign the following 32-byte random data:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: SelectableText(
+                _formatHex(randomData),
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                ),
               ),
             ),
-            const Spacer(),
-            ElevatedButton.icon(
-              onPressed: _isProcessing ? null : _autoReadCard,
-              icon: _isProcessing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_fix_high, size: 18),
-              label: const Text('Auto Read'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            const SizedBox(height: 8),
+            Text(
+              'Length: 32 bytes (64 hex chars)',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: commands.entries.take(6).map((entry) {
-            return ElevatedButton(
-              onPressed: () {
-                _commandController.text = entry.value;
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF6366F1),
-                side: const BorderSide(color: Color(0xFF6366F1)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              child: Text(entry.key, style: const TextStyle(fontSize: 12)),
-            );
-          }).toList(),
-        ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign'),
+          ),
+        ],
+      ),
     );
-  }
-
-  Future<void> _autoReadCard() async {
+    
+    if (confirmed != true) return;
+    
     setState(() => _isProcessing = true);
     
     try {
-      // 1. Select Master File
-      await _sendCommandAuto('00A40000023F00', 'SELECT MF');
-      await Future.delayed(const Duration(milliseconds: 300));
-      
-      // 2. Try to read common file IDs
-      final commonFiles = [
-        '2F00', // EF.DIR
-        '2F01', // EF.ATR
-        '2F02', // EF.ICCID
-        '2F05', // EF.PL
-        '2F06', // EF.ARR
-      ];
-      
-      for (final fileId in commonFiles) {
-        // Select file
-        await _sendCommandAuto('00A4020C02$fileId', 'SELECT EF $fileId');
-        await Future.delayed(const Duration(milliseconds: 200));
-        
-        // Try to read binary
-        await _sendCommandAuto('00B0000000', 'READ BINARY $fileId');
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
-      
-      _showMessage('Auto read completed! Check history for results.');
-      
-    } catch (e) {
-      _showMessage('Auto read error: $e');
-    } finally {
+      final response = await _smartCardService.psoDigitalSignature(randomData);
       setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<void> _sendCommandAuto(String command, String description) async {
-    final response = await _smartCardService.transmitApdu(command);
-    if (response != null) {
-      _addToHistory('$description: $command', response);
+      
+      if (response != null) {
+        _addToHistory('PSO DIGITAL SIGNATURE\nData: ${_formatHex(randomData)}', response);
+        _showMessage('Digital signature completed');
+      } else {
+        _showMessage('Failed to execute digital signature');
+      }
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      _showMessage('Error: $e');
     }
   }
 
