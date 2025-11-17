@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smartcardos/screens/enhanced_smartcard_screen.dart';
 import '../services/usb_service.dart';
 import 'smartcard_screen.dart';
 
@@ -51,10 +52,19 @@ class _UsbReaderScreenState extends State<UsbReaderScreen> {
   }
 
   void _openSmartCardScreen(int deviceId, String deviceName) {
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => SmartCardScreen(
+    //       deviceId: deviceId,
+    //       deviceName: deviceName,
+    //     ),
+    //   ),
+    // );
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SmartCardScreen(
+        builder: (context) => EnhancedSmartCardScreen(
           deviceId: deviceId,
           deviceName: deviceName,
         ),

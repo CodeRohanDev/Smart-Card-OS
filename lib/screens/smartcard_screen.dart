@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/usb_service.dart';
@@ -650,6 +652,204 @@ class _SmartCardScreenState extends State<SmartCardScreen> {
       
       if (response != null) {
         _addToHistory('PSO DIGITAL SIGNATURE\nData: ${_formatHex(randomData)}', response);
+        
+        // Debug: Print raw response
+        print('DEBUG - Raw response: $response');
+        print('DEBUG - Response length: ${response.replaceAll(' ', '').length} chars');
+        
+        // Parse response to extract signature and status
+        final parsedResponse = _parseResponse(response);
+        final signature = parsedResponse['data'] ?? '';
+        final statusWord = parsedResponse['statusWord'] ?? '';
+        final isSuccess = statusWord.replaceAll(' ', '') == '9000';
+        
+        // Debug: Print parsed data
+        print('DEBUG - Parsed signature: $signature');
+        print('DEBUG - Parsed status: $statusWord');
+        print('DEBUG - Signature length: ${signature.replaceAll(' ', '').length} chars');
+        
+        // Show signature result dialog
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    isSuccess ? Icons.check_circle : Icons.error,
+                    color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Signature Result'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Original Data
+                    const Text(
+                      'Original Data (32 bytes):',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)),
+                      ),
+                      child: SelectableText(
+                        _formatHex(randomData),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                          color: Color(0xFF6366F1),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Raw Response (for debugging)
+                    const Text(
+                      'Raw Response:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: SelectableText(
+                        response,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Total: ${response.replaceAll(' ', '').length ~/ 2} bytes',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Signed Data (Signature)
+                    const Text(
+                      'Signed Data (Signature):',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isSuccess 
+                            ? const Color(0xFF10B981).withOpacity(0.1)
+                            : const Color(0xFFEF4444).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSuccess 
+                              ? const Color(0xFF10B981).withOpacity(0.3)
+                              : const Color(0xFFEF4444).withOpacity(0.3),
+                        ),
+                      ),
+                      child: SelectableText(
+                        signature.isEmpty ? 'No signature data (only status word received)' : signature,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                          color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+                    if (signature.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Length: ${signature.replaceAll(' ', '').length ~/ 2} bytes',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    
+                    // Status
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isSuccess 
+                            ? const Color(0xFF10B981).withOpacity(0.1)
+                            : const Color(0xFFEF4444).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isSuccess ? Icons.check_circle_outline : Icons.error_outline,
+                            size: 16,
+                            color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Status: $statusWord - ${SmartCardService.parseStatusWord(statusWord)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: signature));
+                    _showMessage('Signature copied to clipboard');
+                  },
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text('Copy Signature'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          );
+        }
+        
         _showMessage('Digital signature completed');
       } else {
         _showMessage('Failed to execute digital signature');
